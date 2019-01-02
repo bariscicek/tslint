@@ -1,23 +1,23 @@
 // Other styles of import statements.
 import someDefault, {nameA, nameBReallyLong as anotherName} from "./wherever";
 import someDefault from "module";
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ [Import sources within a group must be alphabetized.]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ [Import sources within a group must be alphabetized by path.]
 import "something";
 
 // contains relative path & ImportEqualsDeclaration
 import c = require('./baz/c');
 import a from './foo/a';
-~~~~~~~~~~~~~~~~~~~~~~~~ [Import sources within a group must be alphabetized.]
+~~~~~~~~~~~~~~~~~~~~~~~~ [Import sources within a group must be alphabetized by path.]
 import b from './bar/b';
 
 // contains relative path & ImportEqualsDeclaration
 import c = require('./baz/c');
 import a from '../../foo/a';
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~ [Import sources within a group must be alphabetized.]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~ [Import sources within a group must be alphabetized by path.]
 import b from './bar/b';
 
 // contains scoped import
 import b = require('foo/b');
 import a from 'foo/a';
-~~~~~~~~~~~~~~~~~~~~~~ [Import sources within a group must be alphabetized.]
+~~~~~~~~~~~~~~~~~~~~~~ [Import sources within a group must be alphabetized by path.]
 import c from 'foo/c';

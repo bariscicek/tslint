@@ -55,6 +55,13 @@ export class Rule extends Lint.Rules.AbstractRule {
             * \`"lowercase-last"\`: Correct order is \`"Bar"\`, \`"Foo"\`, \`"baz"\`.
             * \`"any"\`: Allow any order.
 
+            You may set \`"order-by"\` option to control order item.
+
+            Possible values for \`"order-by\`" are:
+
+            * \`"path"\`: Order by the path of the import. (This is the default.)
+            * \`"name"\`: Order by the name of the import.
+
             You may set the \`"grouped-imports"\` option to control the grouping of source
             imports (the \`"foo"\` in \`import {A, B, C} from "foo"\`).
 
@@ -92,6 +99,10 @@ export class Rule extends Lint.Rules.AbstractRule {
                     type: "string",
                     enum: ["case-insensitive", "lowercase-first", "lowercase-last", "any"],
                 },
+                "order-by": {
+                    type: "string",
+                    enum: ["path", "name"],
+                },
                 "named-imports-order": {
                     type: "string",
                     enum: ["case-insensitive", "lowercase-first", "lowercase-last", "any"],
@@ -109,6 +120,7 @@ export class Rule extends Lint.Rules.AbstractRule {
                 true,
                 {
                     "import-sources-order": "lowercase-last",
+                    "order-by": "path",
                     "named-imports-order": "lowercase-first",
                 },
             ],
@@ -120,7 +132,10 @@ export class Rule extends Lint.Rules.AbstractRule {
 
     public static IMPORT_SOURCES_NOT_GROUPED =
         "Import sources of different groups must be sorted by: libraries, parent directories, current directory.";
-    public static IMPORT_SOURCES_UNORDERED = "Import sources within a group must be alphabetized.";
+    public static IMPORT_SOURCES_UNORDERED_PATH =
+        "Import sources within a group must be alphabetized by path.";
+    public static IMPORT_SOURCES_UNORDERED_NAME =
+        "Import sources within a group must be alphabetized by name.";
     public static NAMED_IMPORTS_UNORDERED = "Named imports must be alphabetized.";
     public static IMPORT_SOURCES_OF_SAME_TYPE_NOT_IN_ONE_GROUP =
         "Import sources of the same type (package, same folder, different folder) must be grouped together.";
@@ -288,7 +303,7 @@ class Walker extends Lint.AbstractWalker<Options> {
 
         if (previousSource !== null && compare(currentSource, previousSource) === -1) {
             this.lastFix = [];
-            this.addFailureAtNode(node, Rule.IMPORT_SOURCES_UNORDERED, this.lastFix);
+            this.addFailureAtNode(node, Rule.IMPORT_SOURCES_UNORDERED_PATH, this.lastFix);
         }
     }
 
