@@ -156,6 +156,8 @@ const TRANSFORMS = new Map<string, Transform>([
     ["lowercase-first", flipCase],
     ["lowercase-last", x => x],
     ["full", x => x],
+    ["path", x => x],
+    ["name", x => x.substr(0, 0)],
     [
         "basename",
         x => {
@@ -173,14 +175,19 @@ const TRANSFORMS = new Map<string, Transform>([
 ]);
 
 enum ImportType {
+    UNDEFINED = 0,
     LIBRARY_IMPORT = 1,
     PARENT_DIRECTORY_IMPORT = 2, // starts with "../"
     CURRENT_DIRECTORY_IMPORT = 3, // starts with "./"
+    DEFAULT_IMPORT = 4,
+    NAMED_WITH_LOWERCASE = 5,
+    NAMED_WITH_UPPERCASE = 6,
 }
 
 interface Options {
     groupedImports: boolean;
     importSourcesOrderTransform: Transform;
+    orderBy: Transform;
     moduleSourcePath: Transform;
     namedImportsOrderTransform: Transform;
 }
@@ -188,6 +195,7 @@ interface Options {
 interface JsonOptions {
     "grouped-imports"?: boolean;
     "import-sources-order"?: string;
+    "order-by"?: string;
     "named-imports-order"?: string;
     "module-source-path"?: string;
 }
@@ -197,12 +205,14 @@ function parseOptions(ruleArguments: any[]): Options {
     const {
         "grouped-imports": isGrouped = false,
         "import-sources-order": sources = "case-insensitive",
+        "order-by": order = "path",
         "named-imports-order": named = "case-insensitive",
         "module-source-path": path = "full",
     } = optionSet === undefined ? {} : optionSet;
     return {
         groupedImports: isGrouped,
         importSourcesOrderTransform: TRANSFORMS.get(sources)!,
+        orderBy: TRANSFORMS.get(order)!,
         moduleSourcePath: TRANSFORMS.get(path)!,
         namedImportsOrderTransform: TRANSFORMS.get(named)!,
     };
@@ -266,6 +276,7 @@ class Walker extends Lint.AbstractWalker<Options> {
         this.checkSource(source, node);
 
         const { importClause } = node;
+
         if (
             importClause !== undefined &&
             importClause.namedBindings !== undefined &&
@@ -279,7 +290,6 @@ class Walker extends Lint.AbstractWalker<Options> {
         // only allowed `import x = require('y');`
 
         const { moduleReference } = node;
-
         if (!isExternalModuleReference(moduleReference)) {
             return;
         }
@@ -295,7 +305,7 @@ class Walker extends Lint.AbstractWalker<Options> {
     }
 
     private checkSource(originalSource: string, node: ImportDeclaration["node"]) {
-        const type = getImportType(originalSource);
+        const type = getImportTypeBySource(originalSource);
         const source = this.options.importSourcesOrderTransform(originalSource);
         const currentSource = this.options.moduleSourcePath(source);
         const previousSource = this.currentImportsBlock.getLastImportSource();
@@ -307,6 +317,18 @@ class Walker extends Lint.AbstractWalker<Options> {
         }
     }
 
+    private checkName(originalSource: string, node: ts.ImportDeclaration) {
+        const type = getImportTypeByName(node);
+        const source = this.options.importSourcesOrderTransform(originalSource);
+        const currentSource = this.options.moduleSourcePath(source);
+        const previousSource = this.currentImportsBlock.getLastImportSource();
+        this.currentImportsBlock.addImportDeclaration(this.sourceFile, node, currentSource, type);
+
+        if (previousSource !== null && compare(currentSource, previousSource) === -1) {
+            this.lastFix = [];
+            this.addFailureAtNode(node, Rule.IMPORT_SOURCES_UNORDERED_NAME, this.lastFix);
+        }
+    }
     private endBlock(): void {
         if (this.lastFix !== undefined) {
             const replacement = this.currentImportsBlock.getReplacement();
@@ -554,7 +576,7 @@ class ImportsBlock {
     }
 }
 
-function getImportType(sourcePath: string): ImportType {
+function getImportTypeBySource(sourcePath: string): ImportType {
     if (sourcePath.charAt(0) === ".") {
         if (sourcePath.charAt(1) === ".") {
             return ImportType.PARENT_DIRECTORY_IMPORT;
@@ -564,6 +586,40 @@ function getImportType(sourcePath: string): ImportType {
     } else {
         return ImportType.LIBRARY_IMPORT;
     }
+}
+
+function getImportTypeByName(node: ts.ImportDeclaration): ImportType {
+    if (!isStringLiteral(node.moduleSpecifier)) {
+        // Ignore grammar error
+        return ImportType.UNDEFINED;
+    }
+
+    const sourcePath = removeQuotes(node.moduleSpecifier.text);
+
+    if (sourcePath.charAt(0) !== ".") {
+        return ImportType.LIBRARY_IMPORT;
+    }
+
+    const { importClause } = node;
+
+    const isUpperCase = (char: string) => char >= "A" && char <= "Z";
+
+    if (
+        importClause !== undefined &&
+        importClause.namedBindings !== undefined &&
+        isNamedImports(importClause.namedBindings)
+    ) {
+        const { elements } = importClause.namedBindings;
+        if (elements.some(element => isUpperCase(element.name.getText().charAt(0)))) {
+            return ImportType.NAMED_WITH_UPPERCASE;
+        } else {
+            return ImportType.NAMED_WITH_LOWERCASE;
+        }
+    } else {
+        return ImportType.DEFAULT_IMPORT;
+    }
+
+    return ImportType.NAMED_WITH_UPPERCASE;
 }
 
 // Convert aBcD --> AbCd

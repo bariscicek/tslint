@@ -51,6 +51,6 @@ import * as foo from 'foo';  import * as bar from 'bar';
 
 import * as foo from 'foo';
 import * as bar from 'bar';
-~~~~~~~~~~~~~~~~~~~~~~~~~~~ [Import sources within a group must be alphabetized by path.]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~ [ordered-sources]
 [ordered-imports]: Named imports must be alphabetized.
 [ordered-sources]: Import sources within a group must be alphabetized by path.

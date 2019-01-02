@@ -8,7 +8,7 @@ import {foo, afoo} from 'foo';
 
 import './baz'; // required
 import './baa';
-~~~~~~~~~~~~~~~ [Import sources within a group must be alphabetized.]
+~~~~~~~~~~~~~~~ [Import sources within a group must be alphabetized by path.]
 
 import './caa';
 ~~~~~~~~~~~~~~~ [Import sources of the same type (package, same folder, different folder) must be grouped together.]

@@ -40,5 +40,5 @@ import someDefault, {nameA, nameBReallyLong as anotherName} from "./wherever";
 // do not fix cases where a newline is missing
 import * as foo from 'foo';  import * as bar from 'bar';
 
-import * as foo from 'foo';
 import * as bar from 'bar';
+import * as foo from 'foo';
