@@ -68,7 +68,9 @@ export class Rule extends Lint.Rules.AbstractRule {
             Possible values for \`"grouped-imports"\` are:
 
             * \`false\`: Do not enforce grouping. (This is the default.)
-            * \`true\`: Group source imports by \`"bar"\`, \`"../baz"\`, \`"./foo"\`.
+            * \`true\`: Group source imports by \`"bar"\`, \`"../baz"\`, \`"./foo"\`. If
+            \`"order-by"\` is \`"name"\` group imports by third party imports, default
+            imports, camel case named imports and capital case named imports.
 
             You may set the \`"named-imports-order"\` option to control the ordering of named
             imports (the \`{A, B, C}\` in \`import {A, B, C} from "foo"\`).
@@ -132,13 +134,15 @@ export class Rule extends Lint.Rules.AbstractRule {
 
     public static IMPORT_SOURCES_NOT_GROUPED =
         "Import sources of different groups must be sorted by: libraries, parent directories, current directory.";
-    public static IMPORT_SOURCES_UNORDERED_PATH =
-        "Import sources within a group must be alphabetized by path.";
-    public static IMPORT_SOURCES_UNORDERED_NAME =
-        "Import sources within a group must be alphabetized by name.";
+    public static IMPORTS_NOT_GROUPED =
+        "Imports of different groups must be sorted by: libraries, default imports, camel case imports and capital case imports";
+    public static IMPORT_SOURCES_UNORDERED = "Import sources within a group must be alphabetized.";
+    public static IMPORTS_UNORDERED = "Imports within a group must be alphabetized by name.";
     public static NAMED_IMPORTS_UNORDERED = "Named imports must be alphabetized.";
     public static IMPORT_SOURCES_OF_SAME_TYPE_NOT_IN_ONE_GROUP =
         "Import sources of the same type (package, same folder, different folder) must be grouped together.";
+    public static IMPORTS_OF_SAME_TYPE_NOT_IN_ONE_GROUP =
+        "Import sources of the same type (package, default imports, camel case imports, capital case imports) must be grouped together.";
 
     public apply(sourceFile: ts.SourceFile): Lint.RuleFailure[] {
         return this.applyWithWalker(
@@ -317,7 +321,7 @@ class Walker extends Lint.AbstractWalker<Options> {
 
         if (previousSource !== null && compare(currentSource, previousSource) === -1) {
             this.lastFix = [];
-            this.addFailureAtNode(node, Rule.IMPORT_SOURCES_UNORDERED_PATH, this.lastFix);
+            this.addFailureAtNode(node, Rule.IMPORT_SOURCES_UNORDERED, this.lastFix);
         }
     }
 
@@ -329,12 +333,11 @@ class Walker extends Lint.AbstractWalker<Options> {
         const currentName = this.getFirstName(node);
         const lastImport = this.currentImportsBlock.getLastImport();
         const previousName = lastImport ? this.getFirstName(<any>lastImport.node) : "";
-        console.log(currentName, previousName);
 
         this.currentImportsBlock.addImportDeclaration(this.sourceFile, node, currentSource, type);
         if (previousSource !== null && compare(currentName, previousName) === -1) {
             this.lastFix = [];
-            this.addFailureAtNode(node, Rule.IMPORT_SOURCES_UNORDERED_NAME, this.lastFix);
+            this.addFailureAtNode(node, Rule.IMPORTS_UNORDERED, this.lastFix);
         }
     }
     private endBlock(): void {
@@ -398,11 +401,27 @@ class Walker extends Lint.AbstractWalker<Options> {
     }
 
     private checkBlocksUniqueness(): void {
-        const typesEncountered = new Map<ImportType, boolean>([
+        const typesEncounteredSource = new Map<ImportType, boolean>([
             [ImportType.LIBRARY_IMPORT, false],
             [ImportType.PARENT_DIRECTORY_IMPORT, false],
             [ImportType.CURRENT_DIRECTORY_IMPORT, false],
         ]);
+
+        const typesEncounteredName = new Map<ImportType, boolean>([
+            [ImportType.LIBRARY_IMPORT, false],
+            [ImportType.DEFAULT_IMPORT, false],
+            [ImportType.NAMED_WITH_LOWERCASE, false],
+            [ImportType.NAMED_WITH_UPPERCASE, false],
+        ]);
+
+        const typesEncountered = this.options.groupedImports
+            ? typesEncounteredSource
+            : typesEncounteredName;
+
+        const ruleError =
+            this.options.orderBy === "name"
+                ? Rule.IMPORTS_OF_SAME_TYPE_NOT_IN_ONE_GROUP
+                : Rule.IMPORT_SOURCES_OF_SAME_TYPE_NOT_IN_ONE_GROUP;
 
         const nonEmptyBlocks = this.importsBlocks.filter(
             block => block.getImportDeclarations().length > 0,
@@ -411,10 +430,7 @@ class Walker extends Lint.AbstractWalker<Options> {
             // assume the whole block is of the same type, hence use the first one as the representing one
             const firstInBlock = block.getImportDeclarations()[0];
             if (typesEncountered.get(firstInBlock.type)) {
-                this.addFailureAtNode(
-                    firstInBlock.node,
-                    Rule.IMPORT_SOURCES_OF_SAME_TYPE_NOT_IN_ONE_GROUP,
-                );
+                this.addFailureAtNode(firstInBlock.node, ruleError);
             } else {
                 typesEncountered.set(firstInBlock.type, true);
             }
@@ -423,12 +439,12 @@ class Walker extends Lint.AbstractWalker<Options> {
 
     private checkBlockGroups(importsBlock: ImportsBlock): boolean {
         const oddImportDeclaration = this.getOddImportDeclaration(importsBlock);
+        const ruleError =
+            this.options.orderBy === "name"
+                ? Rule.IMPORTS_NOT_GROUPED
+                : Rule.IMPORT_SOURCES_NOT_GROUPED;
         if (oddImportDeclaration !== undefined) {
-            this.addFailureAtNode(
-                oddImportDeclaration.node,
-                Rule.IMPORT_SOURCES_NOT_GROUPED,
-                this.getReplacements(),
-            );
+            this.addFailureAtNode(oddImportDeclaration.node, ruleError, this.getReplacements());
             return true;
         }
         return false;
