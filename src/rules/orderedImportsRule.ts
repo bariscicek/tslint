@@ -156,8 +156,6 @@ const TRANSFORMS = new Map<string, Transform>([
     ["lowercase-first", flipCase],
     ["lowercase-last", x => x],
     ["full", x => x],
-    ["path", x => x],
-    ["name", x => x.substr(0, 0)],
     [
         "basename",
         x => {
@@ -187,7 +185,7 @@ enum ImportType {
 interface Options {
     groupedImports: boolean;
     importSourcesOrderTransform: Transform;
-    orderBy: Transform;
+    orderBy: string;
     moduleSourcePath: Transform;
     namedImportsOrderTransform: Transform;
 }
@@ -205,14 +203,14 @@ function parseOptions(ruleArguments: any[]): Options {
     const {
         "grouped-imports": isGrouped = false,
         "import-sources-order": sources = "case-insensitive",
-        "order-by": order = "path",
+        "order-by": orderBy = "path",
         "named-imports-order": named = "case-insensitive",
         "module-source-path": path = "full",
     } = optionSet === undefined ? {} : optionSet;
     return {
         groupedImports: isGrouped,
         importSourcesOrderTransform: TRANSFORMS.get(sources)!,
-        orderBy: TRANSFORMS.get(order)!,
+        orderBy,
         moduleSourcePath: TRANSFORMS.get(path)!,
         namedImportsOrderTransform: TRANSFORMS.get(named)!,
     };
@@ -273,7 +271,11 @@ class Walker extends Lint.AbstractWalker<Options> {
         }
 
         const source = removeQuotes(node.moduleSpecifier.text);
-        this.checkSource(source, node);
+        if (this.options.orderBy === "path") {
+            this.checkSource(source, node);
+        } else {
+            this.checkName(source, node);
+        }
 
         const { importClause } = node;
 
@@ -301,7 +303,9 @@ class Walker extends Lint.AbstractWalker<Options> {
         }
 
         const source = removeQuotes(expression.text);
-        this.checkSource(source, node);
+        if (this.options.orderBy === "path") {
+            this.checkSource(source, node);
+        }
     }
 
     private checkSource(originalSource: string, node: ImportDeclaration["node"]) {
@@ -322,9 +326,13 @@ class Walker extends Lint.AbstractWalker<Options> {
         const source = this.options.importSourcesOrderTransform(originalSource);
         const currentSource = this.options.moduleSourcePath(source);
         const previousSource = this.currentImportsBlock.getLastImportSource();
-        this.currentImportsBlock.addImportDeclaration(this.sourceFile, node, currentSource, type);
+        const currentName = this.getFirstName(node);
+        const lastImport = this.currentImportsBlock.getLastImport();
+        const previousName = lastImport ? this.getFirstName(<any>lastImport.node) : "";
+        console.log(currentName, previousName);
 
-        if (previousSource !== null && compare(currentSource, previousSource) === -1) {
+        this.currentImportsBlock.addImportDeclaration(this.sourceFile, node, currentSource, type);
+        if (previousSource !== null && compare(currentName, previousName) === -1) {
             this.lastFix = [];
             this.addFailureAtNode(node, Rule.IMPORT_SOURCES_UNORDERED_NAME, this.lastFix);
         }
@@ -361,6 +369,27 @@ class Walker extends Lint.AbstractWalker<Options> {
             this.lastFix = [];
             this.addFailure(a.getStart(), b.getEnd(), Rule.NAMED_IMPORTS_UNORDERED, this.lastFix);
         }
+    }
+
+    // Gets first named import or default name based on type
+    private getFirstName(node: ts.ImportDeclaration): string {
+        const { importClause } = node;
+
+        if (importClause !== undefined && importClause.name !== undefined) {
+            return String(importClause.name.escapedText);
+        } else if (
+            importClause !== undefined &&
+            importClause.namedBindings !== undefined &&
+            isNamedImports(importClause.namedBindings)
+        ) {
+            const specifier = importClause.namedBindings.elements[0];
+            return String(specifier.name.escapedText);
+        } else if (importClause !== undefined && importClause.namedBindings !== undefined) {
+            const specifier = (importClause.namedBindings as any).name;
+            return String(specifier.escapedText);
+        }
+
+        return "";
     }
 
     private checkBlocksGrouping(): void {
@@ -547,6 +576,14 @@ class ImportsBlock {
         return this.getLastImportDeclaration()!.sourcePath;
     }
 
+    public getLastImport() {
+        if (this.importDeclarations.length === 0) {
+            return null;
+        }
+
+        return this.getLastImportDeclaration();
+    }
+
     // creates a Lint.Replacement object with ordering fixes for the entire block
     public getReplacement() {
         if (this.importDeclarations.length === 0) {
@@ -619,7 +656,7 @@ function getImportTypeByName(node: ts.ImportDeclaration): ImportType {
         return ImportType.DEFAULT_IMPORT;
     }
 
-    return ImportType.NAMED_WITH_UPPERCASE;
+    return ImportType.UNDEFINED;
 }
 
 // Convert aBcD --> AbCd

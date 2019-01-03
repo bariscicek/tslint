@@ -1,1 +1,10 @@
-import { myImport } from "foo";
+import { named } from "bar";
+import bar from "bar";
+
+import * as asteri from "./foo"; // failure
+
+import { myImport } from "./foo";
+import { bar } from "./bar";
+
+import { Bar } from "./foo";
+import { MyIMport } from "./foo";
